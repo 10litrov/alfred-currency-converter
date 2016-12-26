@@ -3,25 +3,29 @@
 <plist version="1.0">
 <dict>
 	<key>bundleid</key>
-	<string>net.10ltrs.alfred-currency-converter</string>
+	<string>com.github.phrolov.alfred-currency-converter</string>
+	<key>category</key>
+	<string>Internet</string>
 	<key>connections</key>
 	<dict>
-		<key>F47EC892-BB29-40D3-83BA-BB542194E3DE</key>
+		<key>9F595BF7-49CB-4186-A020-7C71CF0B17EF</key>
 		<array>
 			<dict>
 				<key>destinationuid</key>
-				<string>6DB7D02B-2C25-48BD-9433-9080C5C56EF4</string>
+				<string>1AF0A414-1E85-4345-BB5D-E2C41B405457</string>
 				<key>modifiers</key>
 				<integer>0</integer>
 				<key>modifiersubtext</key>
 				<string></string>
+				<key>vitoclose</key>
+				<false/>
 			</dict>
 		</array>
 	</dict>
 	<key>createdby</key>
 	<string>Ivan Phrolov</string>
 	<key>description</key>
-	<string></string>
+	<string>Currency converting using daily rates by cbr.ru</string>
 	<key>disabled</key>
 	<false/>
 	<key>name</key>
@@ -31,31 +35,18 @@
 		<dict>
 			<key>config</key>
 			<dict>
-				<key>autopaste</key>
+				<key>alfredfiltersresults</key>
 				<false/>
-				<key>clipboardtext</key>
-				<string>{query}</string>
-			</dict>
-			<key>type</key>
-			<string>alfred.workflow.output.clipboard</string>
-			<key>uid</key>
-			<string>6DB7D02B-2C25-48BD-9433-9080C5C56EF4</string>
-			<key>version</key>
-			<integer>0</integer>
-		</dict>
-		<dict>
-			<key>config</key>
-			<dict>
 				<key>argumenttype</key>
 				<integer>0</integer>
 				<key>escaping</key>
-				<integer>116</integer>
+				<integer>68</integer>
 				<key>keyword</key>
 				<string>cur</string>
 				<key>queuedelaycustom</key>
 				<integer>3</integer>
 				<key>queuedelayimmediatelyinitially</key>
-				<false/>
+				<true/>
 				<key>queuedelaymode</key>
 				<integer>1</integer>
 				<key>queuemode</key>
@@ -63,42 +54,68 @@
 				<key>runningsubtext</key>
 				<string>Fetching exchange rates...</string>
 				<key>script</key>
-				<string>/usr/bin/python convert.py "{query}"</string>
+				<string>import sys
+from convert import convert
+
+sys.stdout.write(convert(sys.argv[1]))</string>
+				<key>scriptargtype</key>
+				<integer>1</integer>
+				<key>scriptfile</key>
+				<string></string>
 				<key>subtext</key>
-				<string>Convert currency from cbr.ru rates</string>
+				<string>Convert currency using cbr.ru daily rates</string>
 				<key>title</key>
 				<string>Convert Currency</string>
 				<key>type</key>
-				<integer>0</integer>
+				<integer>3</integer>
 				<key>withspace</key>
 				<true/>
 			</dict>
 			<key>type</key>
 			<string>alfred.workflow.input.scriptfilter</string>
 			<key>uid</key>
-			<string>F47EC892-BB29-40D3-83BA-BB542194E3DE</string>
+			<string>9F595BF7-49CB-4186-A020-7C71CF0B17EF</string>
 			<key>version</key>
-			<integer>0</integer>
+			<integer>2</integer>
+		</dict>
+		<dict>
+			<key>config</key>
+			<dict>
+				<key>autopaste</key>
+				<false/>
+				<key>clipboardtext</key>
+				<string>{query}</string>
+				<key>transient</key>
+				<false/>
+			</dict>
+			<key>type</key>
+			<string>alfred.workflow.output.clipboard</string>
+			<key>uid</key>
+			<string>1AF0A414-1E85-4345-BB5D-E2C41B405457</string>
+			<key>version</key>
+			<integer>2</integer>
 		</dict>
 	</array>
 	<key>readme</key>
-	<string>Stuff used:
-	* workflow library at http://www.deanishe.net/alfred-workflow/index.html
-	* icon at https://www.iconfinder.com/icons/289341/business_buy_cash_currency_dollar_finance_financial_money_payment_price_shopping_stacked_icon#size=128</string>
+	<string></string>
 	<key>uidata</key>
 	<dict>
-		<key>6DB7D02B-2C25-48BD-9433-9080C5C56EF4</key>
+		<key>1AF0A414-1E85-4345-BB5D-E2C41B405457</key>
 		<dict>
+			<key>xpos</key>
+			<integer>240</integer>
 			<key>ypos</key>
-			<real>10</real>
+			<integer>20</integer>
 		</dict>
-		<key>F47EC892-BB29-40D3-83BA-BB542194E3DE</key>
+		<key>9F595BF7-49CB-4186-A020-7C71CF0B17EF</key>
 		<dict>
+			<key>xpos</key>
+			<integer>70</integer>
 			<key>ypos</key>
-			<real>10</real>
+			<integer>20</integer>
 		</dict>
 	</dict>
 	<key>webaddress</key>
-	<string>github.com/10litrov/alfred-currency-converter</string>
+	<string>https://github.com/phrolov/alfred-currency-converter</string>
 </dict>
 </plist>

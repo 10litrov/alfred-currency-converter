@@ -1,69 +1,82 @@
-import sys
-import re
-from workflow import Workflow, web, ICON_WARNING
+import re, urllib2, json, datetime
+from dateutil import tz, parser, relativedelta
+import xml.etree.ElementTree as xml
 
 
-CBR_RATES_URL = 'http://www.cbr.ru/scripts/XML_daily_eng.asp'
-DEF_VAL = {'CharCode': 'RUB', 'Nominal': '1', 'Value': '1'}
+RATES_URL = 'http://www.cbr.ru/scripts/XML_daily_eng.asp'
+RATES_PATH = 'rates.xml'
+LOCAL_CURRENCY = {'CharCode': 'RUB', 'Nominal': '1', 'Value': '1'}
 
 
 def get_rates():
-	r = web.get(CBR_RATES_URL)
-	r.raise_for_status()
-	return r.xml()
+    try:
+        rates = xml.parse(RATES_PATH)
+        rel = parser.parse(rates.getroot().attrib['Date']).replace(tzinfo=tz.gettz('Europe/Moscow'))
+        now = datetime.datetime.today().replace(tzinfo=tz.tzlocal())
+        day = now.isoweekday()
+        if day == 1:
+            now = now.replace(day=now.day-2)
+        elif day == 7:
+            now = now.replace(day=now.day-1)
+        if relativedelta.relativedelta(now, rel).days >= 1:
+            raise Exception('Exchange rates are out of date')
+    except:
+        rates = xml.parse(urllib2.urlopen(RATES_URL))
+        rates.write(RATES_PATH)
+    return rates
 
-def get_currency(char_code):
-	rates = wf.cached_data('rates', get_rates, 3600)
-	try:
-		result = next(item for item in rates['Valute'] if item['CharCode'] == char_code)
-	except StopIteration:
-		result = None
-	finally:
-		return result
+def get_currency(code):
+    rate = get_rates().find('./Valute[CharCode="{:s}"]'.format(code))
+    if rate is not None:
+        return dict([(item.tag, item.text) for item in list(rate)])
 
-def parse_args(args):
-	result = {'from':None, 'to':None, 'qty':None}
-	for arg in args[:3]:
-		if re.match('[0-9]+([.,][0-9]+)*', arg):
-			result['qty'] = float(arg.replace(',', '.'))
-		else:
-			currency = get_currency(arg) if arg != DEF_VAL['CharCode'] else DEF_VAL
-			key = 'to' if result['from'] else 'from'
-			result[key] = currency
-	return result
+def process_args(args):
+    result = {'src':None, 'dst':None, 'amount':None}
+    for arg in args:
+        if re.match(r'^[0-9]+([.,][0-9]+)*$', arg):
+            result['amount'] = float(arg.replace(',', '.'))
+        else:
+            currency = get_currency(arg) if arg != LOCAL_CURRENCY['CharCode'] else LOCAL_CURRENCY
+            key = 'dst' if result['src'] else 'src'
+            result[key] = currency
+    return result
 
-def show_result(wf, qty, src, res, dst):
-	title_fmt = ('{:.2f}' if type(qty) == float else '{:d}') + ' {:s} = {:.2f} {:s}'
-	title = title_fmt.format(qty, src, res, dst)
-	copytext = '{:.2f}'.format(res)
-	wf.add_item(title, 'Action this item to copy the result to clipboard', largetext=title, arg=copytext, valid=True)
-	wf.send_feedback()
+def error():
+    return json.dumps({'items': [{
+        'title': 'Please, enter the valid query',
+        'valid': False
+    }]})
 
-def show_error(wf):
-	wf.add_item('Please, enter valid query', icon=ICON_WARNING)
-	wf.send_feedback()
-
-
-def main(wf):
-	options = parse_args(wf.args[0].upper().split(' '))
-	src = dst = DEF_VAL['CharCode']
-	qty = res = 1
-	if options['from']:
-		src = options['from']['CharCode']
-		qty = int(options['from']['Nominal'])
-		res = float(options['from']['Value'].replace(',', '.'))
-	if options['qty']:
-		res = res / qty * options['qty']
-		qty = options['qty']
-	if options['to']:
-		dst = options['to']['CharCode']
-		res = res / float(options['to']['Value'].replace(',', '.')) * int(options['from']['Nominal'])
-	if src != dst:
-		show_result(wf, qty, src, res, dst)
-	else:
-		show_error(wf)
+def output(src, dst, amount, result):
+    title = '{:n} {:s} = {:n} {:s}'.format(round(amount, 2), src, round(result, 2), dst)
+    return json.dumps({'items': [{
+        'title': title,
+        'subtitle': 'Action this item to copy result to the clipboard',
+        'arg': '{:n}'.format(round(result, 2)),
+        'text': {'copy': title, 'largetype': title}
+    }]})
 
 
-if __name__ == '__main__':
-	wf = Workflow(capture_args=False)
-	sys.exit(wf.run(main))
+def convert(query):
+    src = LOCAL_CURRENCY['CharCode']
+    dst = LOCAL_CURRENCY['CharCode']
+    amount = 1
+    result = 1
+    
+    args = process_args(query.upper().split(' ')[:3])
+    
+    if args['src']:
+        src = args['src']['CharCode']
+        amount = int(args['src']['Nominal'])
+        result = float(args['src']['Value'].replace(',', '.'))
+    if args['amount']:
+        result = result / amount * args['amount']
+        amount = args['amount']
+    if args['dst']:
+        dst = args['dst']['CharCode']
+        result = result / float(args['dst']['Value'].replace(',', '.')) * int(args['src']['Nominal'])
+    
+    if src == dst:
+        return error()
+    
+    return output(src, dst, amount, result)
