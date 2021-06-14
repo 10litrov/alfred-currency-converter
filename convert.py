@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Callable, Dict
 
 
-LOCAL_CURRENCY = 'RUB'
+LOCAL_CURRENCY = 'rub'
 MOSCOW_TZ = datetime.timezone(datetime.timedelta(hours=3), name='Europe/Moscow')
 RATES_PATH = 'rates.xml'
 
@@ -120,7 +120,7 @@ def convert(
         if target != base:
             result /= exchange_rates[target]
     except KeyError as exc:
-        raise ValueError('{0} is invalid currency code'.format(*exc.args))
+        raise ValueError('"{0}" is invalid currency code'.format(*exc.args))
     return result
 
 
@@ -143,7 +143,7 @@ if __name__ == '__main__':
     parser.add_argument(
         'target',
         nargs='?',
-        default=LOCAL_CURRENCY,
+        default=LOCAL_CURRENCY.upper(),
         help='target currency (default is %(default)s)',
     )
 
@@ -156,7 +156,7 @@ if __name__ == '__main__':
     args = parser.parse_args(args=input_args)
 
     try:
-        result = convert(args.amount, args.source, args.target)
+        result = convert(args.amount, args.source.lower(), args.target.lower())
     except Exception as exc:
         print(alfred_error(str(exc)))
         raise exc

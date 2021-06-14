@@ -9,4 +9,6 @@ Local currency used is Russian Rouble -- ₽.
 
 ## Usage
 
-`./convert.py 10 usd [rub]`
+Download .alfredworkflow file from the [latest release page](https://github.com/ivofrolov/alfred-currency-converter/releases/latest) and import add it to Alfred.
+
+Then type `cur 42 usd` to convert $42 to rubles or `cur 46 eur usd` €46 to dollars.
