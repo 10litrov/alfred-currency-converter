@@ -3,112 +3,125 @@
 import datetime
 import decimal
 import json
-import re
 import urllib.request
-import xml.etree.ElementTree as xml
+import xml.etree.ElementTree as ET
+from functools import wraps
+from pathlib import Path
+from typing import Callable, Dict
 
 
+LOCAL_CURRENCY = 'RUB'
 MOSCOW_TZ = datetime.timezone(datetime.timedelta(hours=3), name='Europe/Moscow')
-RATES_URL = 'http://www.cbr.ru/scripts/XML_daily_eng.asp'
 RATES_PATH = 'rates.xml'
-LOCAL_CURRENCY = {'CharCode': 'RUB', 'Nominal': '1', 'Value': '1'}
 
 
-def get_rates():
+def day_cached(filepath: str, tz: datetime.tzinfo = None) -> Callable:
+    """Caches decorated function return value bytes in file for a day."""
+    filepath = Path(filepath)
+
+    def decorator(func: Callable[..., bytes]) -> Callable:
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            if filepath.exists():
+                modified = datetime.datetime.fromtimestamp(
+                    filepath.stat().st_mtime, tz=tz
+                )
+                now = datetime.datetime.now(tz=tz)
+                if now.date() == modified.date():
+                    return filepath.read_bytes()
+
+            content = func(*args, **kwargs)
+            filepath.write_bytes(content)
+            return content
+
+        return wrapper
+
+    return decorator
+
+
+def parse_number(value: str) -> decimal.Decimal:
     try:
-        rates = xml.parse(RATES_PATH)
-        rel = parser.parse(rates.getroot().attrib['Date'], dayfirst=True).replace(
-            tzinfo=MOSCOW_TZ
-        )
-        now = datetime.datetime.today(tzinfo=MOSCOW_TZ)
-        if (now - rel).days >= 1:
-            raise Exception('Exchange rates are out of date')
-    except:
-        rates = xml.parse(urllib.request.urlopen(RATES_URL))
-        rates.write(RATES_PATH)
-    return rates
-
-
-def get_currency(code):
-    rate = get_rates().find('./Valute[CharCode="{:s}"]'.format(code))
-    if rate is not None:
-        return dict([(item.tag, item.text) for item in list(rate)])
-
-
-def process_args(args):
-    result = {'src': None, 'dst': None, 'amount': None}
-    for arg in args:
-        if re.match(r'^[0-9]+([.,][0-9]+)*$', arg):
-            result['amount'] = float(arg.replace(',', '.'))
-        else:
-            currency = (
-                get_currency(arg)
-                if arg != LOCAL_CURRENCY['CharCode']
-                else LOCAL_CURRENCY
+        cleaned_value = value.replace(',', '.')
+        number = decimal.Decimal(cleaned_value)
+    except decimal.InvalidOperation:
+        raise ValueError(
+            'invalid number {0} - it should conform 3.14 or 3,14 format'.format(
+                cleaned_value
             )
-            key = 'dst' if result['src'] else 'src'
-            result[key] = currency
-    return result
+        )
+    return number
 
 
-def error():
-    return json.dumps(
-        {'items': [{'title': 'Please, enter the valid query', 'valid': False}]}
-    )
+@day_cached(filepath=RATES_PATH, tz=MOSCOW_TZ)
+def get_cbr_rates() -> bytes:
+    """Returns cbr.ru exchange rates xml text."""
+    url = 'http://www.cbr.ru/scripts/XML_daily_eng.asp'
+    with urllib.request.urlopen(url) as response:
+        body = response.read()
+        return body
 
 
-def output(src, dst, amount, result):
-    title = '{:n} {:s} = {:n} {:s}'.format(round(amount, 2), src, round(result, 2), dst)
+def parse_cbr_rates(text: bytes) -> Dict[str, decimal.Decimal]:
+    """Converts xml text to currency:rate mapping for easier usage."""
+    exchange_rates = {}
+
+    root = ET.fromstring(text)
+    for child in root:
+        currency_code = child.findtext('CharCode').lower()
+        nominal = parse_number(child.findtext('Nominal'))
+        value = parse_number(child.findtext('Value'))
+        exchange_rates[currency_code] = value / nominal
+
+    return exchange_rates
+
+
+def alfred_error(message: str) -> str:
     return json.dumps(
         {
             'items': [
                 {
-                    'title': title,
-                    'subtitle': 'Action this item to copy result to the clipboard',
-                    'arg': '{:n}'.format(round(result, 2)),
-                    'text': {'copy': title, 'largetype': title},
+                    'title': 'Please, enter the valid query',
+                    'subtitle': message,
+                    'valid': False,
                 }
             ]
         }
     )
 
 
-def convert(query):
-    src = LOCAL_CURRENCY['CharCode']
-    dst = LOCAL_CURRENCY['CharCode']
-    amount = 1
-    result = 1
-
-    args = process_args(query.upper().split(' ')[:3])
-
-    if args['src']:
-        src = args['src']['CharCode']
-        amount = int(args['src']['Nominal'])
-        result = float(args['src']['Value'].replace(',', '.'))
-    if args['amount']:
-        result = result / amount * args['amount']
-        amount = args['amount']
-    if args['dst']:
-        dst = args['dst']['CharCode']
-        result = (
-            result
-            / float(args['dst']['Value'].replace(',', '.'))
-            * int(args['src']['Nominal'])
-        )
-
-    if src == dst:
-        return error()
-
-    return output(src, dst, amount, result)
+def alfred_output(
+    result: decimal.Decimal, amount: decimal.Decimal, source: str, target: str
+) -> str:
+    title = '{0:n} {1:s} = {2:n} {3:s}'.format(
+        round(amount, 2), source.upper(), round(result, 2), target.upper()
+    )
+    arg = '{0:n}'.format(round(result, 2))
+    return json.dumps(
+        {
+            'items': [
+                {
+                    'title': title,
+                    'subtitle': 'Action this item to copy result to the clipboard',
+                    'arg': arg,
+                    'text': {'copy': arg, 'largetype': title},
+                }
+            ]
+        }
+    )
 
 
-def parse_number(value: str) -> decimal.Decimal:
-    """Provides real number parser for argparse."""
+def convert(
+    amount: decimal.Decimal, source: str, target: str, base: str = LOCAL_CURRENCY
+) -> decimal.Decimal:
+    """Returns an amount converted from one currency to another."""
+    exchange_rates = parse_cbr_rates(get_cbr_rates())
     try:
-        number = decimal.Decimal(value.replace(',', '.'))
-    except decimal.InvalidOperation:
-        raise argparse.ArgumentTypeError('should conform 3.14 or 3,14 format')
-    return number
+        result = amount * exchange_rates[source]
+        if target != base:
+            result /= exchange_rates[target]
+    except KeyError as exc:
+        raise ValueError('{0} is invalid currency code'.format(*exc.args))
+    return result
 
 
 if __name__ == '__main__':
@@ -124,13 +137,13 @@ if __name__ == '__main__':
         help='amount to convert',
     )
     parser.add_argument(
-        'from',
+        'source',
         help='source currency',
     )
     parser.add_argument(
-        'to',
+        'target',
         nargs='?',
-        default='RUB',
+        default=LOCAL_CURRENCY,
         help='target currency (default is %(default)s)',
     )
 
@@ -142,4 +155,9 @@ if __name__ == '__main__':
 
     args = parser.parse_args(args=input_args)
 
-    print(convert('{0.amount} {0.from} {0.to}'.format(args)))
+    try:
+        result = convert(args.amount, args.source, args.target)
+    except Exception as exc:
+        print(alfred_error(str(exc)))
+        raise exc
+    print(alfred_output(result, args.amount, args.source, args.target))
