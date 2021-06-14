@@ -113,6 +113,7 @@ def parse_number(value: str) -> decimal.Decimal:
 
 if __name__ == '__main__':
     import argparse
+    import sys
 
     parser = argparse.ArgumentParser(
         description='Converts an amount from one currency to another.'
@@ -133,6 +134,12 @@ if __name__ == '__main__':
         help='target currency (default is %(default)s)',
     )
 
-    args = parser.parse_args()
+    # Alfred encloses the whole query in quotes so wee need to unwrap it
+    if len(sys.argv) == 2:
+        input_args = sys.argv[1].split(' ')
+    else:
+        input_args = sys.argv[1:]
+
+    args = parser.parse_args(args=input_args)
 
     print(convert('{0.amount} {0.from} {0.to}'.format(args)))
